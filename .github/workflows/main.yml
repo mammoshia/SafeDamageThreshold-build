@@ -1,0 +1,64 @@
+name: Build SafeDamageThreshold
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths-ignore:
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Checkout CommonLibF4
+        shell: pwsh
+        run: |
+          git clone --depth 1 https://github.com/libxse/commonlibf4.git lib/commonlibf4
+          git -C lib/commonlibf4 submodule update --init --recursive --depth 1
+
+      - name: Set up Xmake
+        uses: xmake-io/github-action-setup-xmake@v1
+        with:
+          xmake-version: latest
+          package-cache: true
+
+      - name: Configure
+        shell: pwsh
+        run: xmake f -p windows -a x64 -m releasedbg -y
+
+      - name: Build
+        shell: pwsh
+        run: xmake build -y -vD
+
+      - name: Locate DLL and create mod package
+        shell: pwsh
+        run: |
+          $dll = Get-ChildItem -Path build -Recurse -Filter SafeDamageThreshold.dll | Select-Object -First 1
+          if (-not $dll) {
+            Write-Host 'Build tree:'
+            Get-ChildItem -Path build -Recurse | Select-Object FullName
+            throw 'SafeDamageThreshold.dll was not found.'
+          }
+
+          New-Item -ItemType Directory -Force -Path artifact/Data/F4SE/Plugins | Out-Null
+          Copy-Item $dll.FullName artifact/Data/F4SE/Plugins/SafeDamageThreshold.dll
+          Copy-Item package/Data/F4SE/Plugins/SafeDamageThreshold.ini artifact/Data/F4SE/Plugins/SafeDamageThreshold.ini
+          Copy-Item README_JP.md artifact/README_JP.md
+          Copy-Item LICENSE artifact/LICENSE
+
+          Compress-Archive -Path artifact/* -DestinationPath SafeDamageThreshold-0.1.0.zip -Force
+
+      - name: Upload ready-to-install ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeDamageThreshold-0.1.0
+          path: SafeDamageThreshold-0.1.0.zip
+          if-no-files-found: error
