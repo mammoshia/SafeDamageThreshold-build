@@ -1,0 +1,2 @@
+# SafeDamageThreshold-build
+AIMOD用
